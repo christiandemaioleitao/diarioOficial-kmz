@@ -58,6 +58,7 @@ jobs:
         run: |
           git config --global user.name  'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          git add --ignore-missing ultimo_diario.txt ids_enviados.json
+          [ -f ultimo_diario.txt ] && git add ultimo_diario.txt || true
+          [ -f ids_enviados.json ] && git add ids_enviados.json || true
           git diff --staged --quiet || \
             (git commit -m "bot: atualiza controle de leitura [skip ci]" && git push)
