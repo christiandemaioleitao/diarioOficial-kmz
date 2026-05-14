@@ -37,11 +37,14 @@ from src.telegram_sender import send_message, send_terreno_notification
 load_dotenv()
 
 # ── Configuration ──────────────────────────────────────────────────────────────
-URL_BASE    = "https://www.goiania.go.gov.br"
-ANO_ATUAL   = datetime.date.today().year
+URL_BASE   = "https://www.goiania.go.gov.br"
+# Criando a data específica: ano, mês, dia
+DATA_ALVO  = datetime.date(2026, 4, 27)
+ANO_ALVO   = DATA_ALVO.year
+
 URL_DIARIOS = (
     f"https://www.goiania.go.gov.br/shtml//portal/casacivil/lista_diarios.asp"
-    f"?ano={ANO_ATUAL}"
+    f"?ano={ANO_ALVO}"
 )
 
 GOOGLE_API_KEY   = os.environ.get("GOOGLE_API_KEY")
