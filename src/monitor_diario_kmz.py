@@ -82,50 +82,18 @@ else:
 #      Diário Oficial de Goiânia (Limites e Confrontações, Desmembramento, etc.)
 PROMPT_IA = """
 Analise o texto do Diário Oficial de Goiânia abaixo.
+Identifique 'Certidões de Remembramento'.
+Para cada uma, extraia:
+1. Interessado
+2. Endereço/Localização do imóvel
+3. Resumo da decisão
 
-Identifique TODAS as certidões imobiliárias, incluindo (mas não limitado a):
-- Certidão de Limites e Confrontações
-- Certidão de Limites e Confrontações Sem Demarcação
-- Certidão de Remembramento
-- Certidão de Desmembramento
-- Certidão de Localização de Área
-- Certidão de Regularização
-- Qualquer outra certidão relacionada a imóveis, terrenos ou lotes
-
-Para cada certidão encontrada, extraia:
-1. interessado  — Nome completo do interessado
-2. local        — Endereço/localização (bairro, quadra, lote(s))
-3. decisao      — Tipo da certidão + resumo da decisão
-4. endereco_kmz — Endereço estruturado para geração de KMZ
-                  Formato: "BAIRRO, Quadra Y, Lote(s) Z"
-                  Use os valores exatos dos campos BAIRRO, QUADRA e LOTE(S) do texto.
-
-Exemplo de bloco no texto:
-  CERTIDÃO Nº 530/2026
-  CERTIDÃO DE LIMITES E CONFRONTAÇÕES SEM DEMARCAÇÃO
-  INTERESSADO LUZIA LOURENÇO DE PAULA
-  INSCRIÇÃO IPTU 401.032.0043.007-3
-  ENDEREÇO
-  QUADRA 83 LOTE(S) 2/38 BAIRRO SETOR CENTRAL
-
-  → interessado: "LUZIA LOURENÇO DE PAULA"
-  → local: "QUADRA 83, LOTE(S) 2/38, SETOR CENTRAL"
-  → decisao: "Certidão de Limites e Confrontações Sem Demarcação"
-  → endereco_kmz: "SETOR CENTRAL, Quadra 83, Lote(s) 2/38"
-
-Retorne um JSON válido com uma lista de objetos:
-[
-  {
-    "interessado": "Nome",
-    "local": "Endereço completo",
-    "decisao": "Tipo da certidão + resumo",
-    "endereco_kmz": "BAIRRO, Quadra Y, Lote(s) Z"
-  }
-]
-
-Se não encontrar NENHUMA certidão imobiliária, retorne: []
-Retorne APENAS o JSON, sem texto adicional, sem blocos markdown.
-"""
+Formate em HTML para Telegram:
+🏢 <b>Interessado:</b> <i>Nome</i>
+📍 <b>Local:</b> <i>Endereço</i>
+📝 <b>Decisão:</b> <i>Resumo</i>
+------------------------
+Se não encontrar nada, responda apenas: "Nenhum remembramento encontrado no diário de hoje.""""
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
