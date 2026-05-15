@@ -4,7 +4,17 @@ on:
   schedule:
     # 12:13 horário de Brasília (UTC-3) = 15:13 UTC
     - cron: '13 15 * * *'
-  workflow_dispatch:   # Permite execução manual para testes
+  workflow_dispatch:
+    # Permite execução manual com parâmetros opcionais para testes
+    inputs:
+      data_override:
+        description: 'Data específica para processar (YYYY-MM-DD). Deixe vazio para usar a data de hoje.'
+        required: false
+        default: ''
+      force_reprocess:
+        description: 'Reprocessar mesmo que já tenha sido processado? (1 = sim)'
+        required: false
+        default: '0'
 
 jobs:
   monitor:
@@ -52,13 +62,15 @@ jobs:
           SILICONFLOW_KEY:  ${{ secrets.SILICONFLOW_KEY }}
           GROQ_KEY:         ${{ secrets.GROQ_KEY }}
           KMZ_OUTPUT_DIR:   kmz_outputs
+          # Parâmetros de override para execução manual (workflow_dispatch)
+          DATA_OVERRIDE:    ${{ github.event.inputs.data_override }}
+          FORCE_REPROCESS:  ${{ github.event.inputs.force_reprocess || '0' }}
         run: python -m src.monitor_diario_kmz
 
       - name: Commitar controle de leitura atualizado
         run: |
           git config --global user.name  'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          [ -f ultimo_diario.txt ] && git add ultimo_diario.txt || true
-          [ -f ids_enviados.json ] && git add ids_enviados.json || true
+          git add ultimo_diario.txt ids_enviados.json || true
           git diff --staged --quiet || \
             (git commit -m "bot: atualiza controle de leitura [skip ci]" && git push)

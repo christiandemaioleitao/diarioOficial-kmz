@@ -13,18 +13,18 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-TELEGRAM_TOKEN   = os.environ.get("TELEGRAM_TOKEN")
-TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
+# FIX: credentials are read inside each function at call time, NOT at module
+# import time.  The old pattern built TELEGRAM_API = "…/bot{token}" at import,
+# which produced "…/botNone" when the env var wasn't loaded yet — causing every
+# API call to silently fail with a 404 that was never logged properly.
 
-TELEGRAM_API = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}"
 
-
-def _check_env() -> bool:
-    """Return False and print warning if token/chat_id are missing."""
-    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
-        print("⚠️  TELEGRAM_TOKEN ou TELEGRAM_CHAT_ID não configurados.")
-        return False
-    return True
+def _get_creds() -> tuple[str | None, str | None]:
+    """Return (token, chat_id) read from env at call time."""
+    return (
+        os.environ.get("TELEGRAM_TOKEN"),
+        os.environ.get("TELEGRAM_CHAT_ID"),
+    )
 
 
 def send_message(text: str, parse_mode: str = "HTML") -> bool:
@@ -34,22 +34,30 @@ def send_message(text: str, parse_mode: str = "HTML") -> bool:
 
     Returns True on success, False on failure.
     """
-    if not _check_env() or not text:
+    token, chat_id = _get_creds()
+    if not token or not chat_id:
+        print("⚠️  TELEGRAM_TOKEN ou TELEGRAM_CHAT_ID não configurados.")
+        return False
+    if not text:
         return False
 
-    url = f"{TELEGRAM_API}/sendMessage"
-    chunks = [text[i:i + 4000] for i in range(0, len(text), 4000)]
+    api_base = f"https://api.telegram.org/bot{token}"
+    url      = f"{api_base}/sendMessage"
+    chunks   = [text[i:i + 4000] for i in range(0, len(text), 4000)]
 
     success = True
     for chunk in chunks:
         payload = {
-            "chat_id": TELEGRAM_CHAT_ID,
+            "chat_id": chat_id,
             "text": chunk,
             "parse_mode": parse_mode,
         }
         try:
             resp = requests.post(url, json=payload, timeout=30)
-            resp.raise_for_status()
+            if not resp.ok:
+                # FIX: log actual Telegram error body, not just exception
+                print(f"❌ Telegram sendMessage {resp.status_code}: {resp.text[:300]}")
+                success = False
         except Exception as exc:
             print(f"❌ Erro ao enviar mensagem Telegram: {exc}")
             success = False
@@ -72,16 +80,19 @@ def send_document(
 
     Returns True on success, False on failure.
     """
-    if not _check_env():
+    token, chat_id = _get_creds()
+    if not token or not chat_id:
+        print("⚠️  TELEGRAM_TOKEN ou TELEGRAM_CHAT_ID não configurados.")
         return False
 
     if not os.path.exists(file_path):
         print(f"❌ Arquivo não encontrado: {file_path}")
         return False
 
-    url = f"{TELEGRAM_API}/sendDocument"
+    api_base = f"https://api.telegram.org/bot{token}"
+    url  = f"{api_base}/sendDocument"
     data = {
-        "chat_id": TELEGRAM_CHAT_ID,
+        "chat_id": chat_id,
         "caption": caption[:1024],
         "parse_mode": parse_mode,
     }
@@ -94,7 +105,10 @@ def send_document(
                 files={"document": fh},
                 timeout=60,
             )
-        resp.raise_for_status()
+        if not resp.ok:
+            # FIX: log actual Telegram error body
+            print(f"❌ Telegram sendDocument {resp.status_code}: {resp.text[:300]}")
+            return False
         return True
     except Exception as exc:
         print(f"❌ Erro ao enviar documento Telegram: {exc}")
