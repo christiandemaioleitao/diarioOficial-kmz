@@ -53,11 +53,10 @@ jobs:
         env:
           TELEGRAM_TOKEN:   ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          GOOGLE_API_KEY:   ${{ secrets.GOOGLE_API_KEY }}
+          ZAI_API_KEY:      ${{ secrets.ZAI_API_KEY }}
           SUPABASE_URL:     ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY:     ${{ secrets.SUPABASE_KEY }}
           URL_BASE_LOTES:   ${{ secrets.URL_BASE_LOTES }}
-          GEMINI_KEY:       ${{ secrets.GEMINI_KEY }}
           MISTRAL_KEY:      ${{ secrets.MISTRAL_KEY }}
           SILICONFLOW_KEY:  ${{ secrets.SILICONFLOW_KEY }}
           GROQ_KEY:         ${{ secrets.GROQ_KEY }}

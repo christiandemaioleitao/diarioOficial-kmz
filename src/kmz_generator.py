@@ -13,7 +13,7 @@ Pipeline:
 
 Environment variables required (see config.env):
   SUPABASE_URL, SUPABASE_KEY, URL_BASE_LOTES
-  At least one of: GEMINI_KEY, MISTRAL_KEY, SILICONFLOW_KEY, GROQ_KEY, etc.
+  ZAI_API_KEY, and optionally MISTRAL_KEY, SILICONFLOW_KEY, GROQ_KEY, etc.
 """
 
 import os
@@ -39,7 +39,7 @@ COL_ID_LOTE = "id_lote"
 
 # ── API keys (loaded from environment) ───────────────────────────────────────
 API_KEYS = {
-    "GEMINI_KEY":      os.getenv("GEMINI_KEY"),
+    "ZAI_API_KEY":     os.getenv("ZAI_API_KEY"),
     "MISTRAL_KEY":     os.getenv("MISTRAL_KEY"),
     "SILICONFLOW_KEY": os.getenv("SILICONFLOW_KEY"),
     "GROQ_KEY":        os.getenv("GROQ_KEY"),
@@ -51,10 +51,16 @@ API_KEYS = {
 # ── AI model fallback list ────────────────────────────────────────────────────
 MODELS_TO_TRY = [
     {
-        "label": "Gemini 1.5 Flash",
-        "model": "models/gemini-1.5-flash",
-        "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
-        "api_key_var": "GEMINI_KEY",
+        "label": "GLM-4.7 Flash (Z.AI)",
+        "model": "glm-4.7-flash",
+        "base_url": "https://api.z.ai/api/paas/v4/",
+        "api_key_var": "ZAI_API_KEY",
+    },
+    {
+        "label": "GLM-4.5 Flash (Z.AI)",
+        "model": "glm-4.5-flash",
+        "base_url": "https://api.z.ai/api/paas/v4/",
+        "api_key_var": "ZAI_API_KEY",
     },
     {
         "label": "Mistral Large",

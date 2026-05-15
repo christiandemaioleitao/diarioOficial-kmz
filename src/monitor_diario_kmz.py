@@ -7,7 +7,7 @@ Flow:
   1. Fetch Diário Oficial PDF from Goiânia portal (today or DATA_OVERRIDE).
   2. Skip if already processed (ultimo_diario.txt) — unless FORCE_REPROCESS=1.
   3. Extract text from PDF.
-  4. Use Gemini AI to identify ALL certidão types (Limites, Confrontações,
+  4. Use Z.AI (GLM models) to identify ALL certidão types (Limites, Confrontações,
      Desmembramento, Remembramento, Localização, etc.).
   5. For each terreno identified:
        a. Generate KMZ via kmz_generator.
@@ -16,9 +16,9 @@ Flow:
   6. Update ultimo_diario.txt to avoid re-processing.
 
 Environment variables required (see config.env):
-  TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, GOOGLE_API_KEY,
+  TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, ZAI_API_KEY,
   SUPABASE_URL, SUPABASE_KEY, URL_BASE_LOTES,
-  + AI model keys (GEMINI_KEY, MISTRAL_KEY, etc.)
+  + AI model keys (MISTRAL_KEY, etc.)
 
 Testing / override variables:
   DATA_OVERRIDE=YYYY-MM-DD   — process a specific date's Diário instead of today
@@ -34,7 +34,7 @@ import requests
 
 from bs4 import BeautifulSoup
 from pypdf import PdfReader
-import google.generativeai as genai
+from openai import OpenAI
 from dotenv import load_dotenv
 
 from src.kmz_generator import gerar_kmz_para_terreno, validar_kmz
@@ -64,17 +64,18 @@ URL_DIARIOS = (
     f"?ano={ANO_ATUAL}"
 )
 
-GOOGLE_API_KEY    = os.environ.get("GOOGLE_API_KEY")
+ZAI_API_KEY       = os.environ.get("ZAI_API_KEY")
 ULTIMO_DIARIO_TXT = "ultimo_diario.txt"
 FORCE_REPROCESS   = os.environ.get("FORCE_REPROCESS", "0").strip() == "1"
 
-# ── Gemini setup ───────────────────────────────────────────────────────────────
-if GOOGLE_API_KEY:
-    genai.configure(api_key=GOOGLE_API_KEY)
-    # FIX: use gemini-1.5-flash (stable GA release, not preview)
-    gemini_model = genai.GenerativeModel("gemini-1.5-flash")
+# ── Z.AI setup (OpenAI-compatible) ────────────────────────────────────────────
+ZAI_BASE_URL = "https://api.z.ai/api/paas/v4/"
+ZAI_MODELS = ["glm-4.7-flash", "glm-4.5-flash"]
+
+if ZAI_API_KEY:
+    zai_client = OpenAI(api_key=ZAI_API_KEY, base_url=ZAI_BASE_URL)
 else:
-    gemini_model = None
+    zai_client = None
 
 # ── AI Prompt ─────────────────────────────────────────────────────────────────
 # FIX: expanded beyond "Remembramento" to cover ALL certidão types found in the
@@ -198,43 +199,57 @@ def _buscar_link_pdf() -> str | None:
     return links[0][2]
 
 
-def _analisar_com_gemini(texto: str) -> list[dict]:
+def _analisar_com_zai(texto: str) -> list[dict]:
     """
-    Send PDF text to Gemini and parse the returned JSON list of terrenos.
-    Returns empty list on failure.
+    Send PDF text to Z.AI (GLM models) and parse the returned JSON list of terrenos.
+    Tries models in fallback order. Returns empty list on failure.
     """
-    if gemini_model is None:
-        print("⚠️  GOOGLE_API_KEY não configurado. Pulando análise por IA.")
+    if zai_client is None:
+        print("⚠️  ZAI_API_KEY não configurado. Pulando análise por IA.")
         return []
 
     # Limit to first 300k chars to stay within token limits
     texto_limitado = texto[:300000]
 
-    try:
-        response = gemini_model.generate_content(
-            f"{PROMPT_IA}\n\n--- TEXTO DO DIÁRIO OFICIAL ---\n{texto_limitado}"
-        )
-        raw = response.text.strip()
-        # Strip markdown fences if present
-        if raw.startswith("```"):
-            parts = raw.split("```")
-            raw = parts[1] if len(parts) > 1 else raw
-            if raw.startswith("json"):
-                raw = raw[4:]
-        raw = raw.strip()
-        parsed = json.loads(raw)
-        if isinstance(parsed, list):
-            return parsed
-        if isinstance(parsed, dict):
-            return [parsed]
-    except json.JSONDecodeError as exc:
-        print(f"⚠️  Resposta da IA não é JSON válido: {exc}")
+    for model_name in ZAI_MODELS:
         try:
-            print(f"   Resposta bruta (primeiros 500 chars): {response.text[:500]}")
-        except Exception:
-            pass
-    except Exception as exc:
-        print(f"⚠️  Erro ao chamar Gemini: {exc}")
+            print(f"   🤖 Tentando modelo {model_name}...")
+            response = zai_client.chat.completions.create(
+                model=model_name,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": f"{PROMPT_IA}\n\n--- TEXTO DO DIÁRIO OFICIAL ---\n{texto_limitado}"
+                    }
+                ],
+                temperature=0.1,
+            )
+            raw = response.choices[0].message.content.strip()
+            # Strip markdown fences if present
+            if raw.startswith("```"):
+                parts = raw.split("```")
+                raw = parts[1] if len(parts) > 1 else raw
+                if raw.startswith("json"):
+                    raw = raw[4:]
+            raw = raw.strip()
+            parsed = json.loads(raw)
+            if isinstance(parsed, list):
+                print(f"   ✅ {model_name} retornou {len(parsed)} registro(s)")
+                return parsed
+            if isinstance(parsed, dict):
+                print(f"   ✅ {model_name} retornou 1 registro")
+                return [parsed]
+        except json.JSONDecodeError as exc:
+            print(f"⚠️  Resposta de {model_name} não é JSON válido: {exc}")
+            try:
+                print(f"   Resposta bruta (primeiros 500 chars): {response.choices[0].message.content[:500]}")
+            except Exception:
+                pass
+        except Exception as exc:
+            print(f"⚠️  Erro ao chamar {model_name}: {exc}")
+            continue
+
+    print("⚠️  Todos os modelos Z.AI falharam.")
     return []
 
 
@@ -334,8 +349,8 @@ def main() -> None:
         print(f"   🔎 Ocorrências de 'certidão' no texto: {cert_count}")
 
         # ── AI analysis ───────────────────────────────────────────────────────
-        print("🤖 Analisando com Gemini...")
-        terrenos = _analisar_com_gemini(texto)
+        print("🤖 Analisando com Z.AI (GLM)...")
+        terrenos = _analisar_com_zai(texto)
         print(f"   IA retornou: {len(terrenos)} registro(s)")
 
         if not terrenos:
@@ -372,7 +387,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     # FIX: attempt Telegram notification even when env vars are missing
-    missing = [v for v in ["TELEGRAM_TOKEN", "TELEGRAM_CHAT_ID", "GOOGLE_API_KEY"]
+    missing = [v for v in ["TELEGRAM_TOKEN", "TELEGRAM_CHAT_ID", "ZAI_API_KEY"]
                if not os.environ.get(v)]
 
     if missing:
@@ -381,9 +396,9 @@ if __name__ == "__main__":
             f"Configure em .env ou nos Secrets do GitHub Actions."
         )
         print(msg)
-        # If only GOOGLE_API_KEY missing, Telegram still works — warn via bot
+        # If only ZAI_API_KEY missing, Telegram still works — warn via bot
         if "TELEGRAM_TOKEN" not in missing and "TELEGRAM_CHAT_ID" not in missing:
-            send_message(f"⚠️ Script iniciado sem GOOGLE_API_KEY.\n{msg}")
+            send_message(f"⚠️ Script iniciado sem ZAI_API_KEY.\n{msg}")
         raise SystemExit(1)
 
     main()
